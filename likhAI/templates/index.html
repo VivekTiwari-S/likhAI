@@ -1,0 +1,631 @@
+<!--<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwritten Text Processor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'dark-bg': '#121212',
+                        'lighter-black': '#1E1E1E',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-b from-dark-bg to-black text-white min-h-screen flex items-center justify-center">
+    <div class="max-w-4xl w-full p-8">
+        <h1 class="text-3xl font-bold mb-8 text-center"><i class="fas fa-magic mr-2"></i>Handwritten Text Processor</h1>
+        
+
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-image mr-2"></i>Input</h2>
+            <div class="flex justify-center space-x-4 mb-4">
+                <button id="captureBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    <i class="fas fa-camera mr-2"></i>Capture Image
+                </button>
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                <button id="uploadBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    <i class="fas fa-upload mr-2"></i>Upload Image
+                </button>
+            </div>
+            <div id="previewContainer" class="relative pt-[56.25%] bg-gray-800 rounded overflow-hidden hidden">
+                <video id="video" class="absolute top-0 left-0 w-full h-full object-cover hidden"></video>
+                <canvas id="canvas" class="absolute top-0 left-0 w-full h-full object-cover hidden"></canvas>
+                <img id="uploadedImage" class="absolute top-0 left-0 w-full h-full object-cover hidden" alt="Uploaded image">
+            </div>
+            <div class="flex justify-center mt-4">
+                <button id="extractTextBtn" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">
+                    <i class="fas fa-file-alt mr-2"></i>Extract Text
+                </button>
+            </div>
+        </div>
+        
+
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-file-text mr-2"></i>Extracted Text</h2>
+            <div class="relative pt-2">
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-700">
+                    <div id="extractionProgress" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <textarea id="extractedText" class="w-full h-32 p-2 border rounded bg-gray-700 text-white" readonly></textarea>
+        </div>
+        
+
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-cogs mr-2"></i>Processing Options</h2>
+            <div class="flex justify-center space-x-4 items-center">
+                <select id="processOption" class="p-2 border rounded bg-gray-700 text-white">
+                    <option value="">Select an option</option>
+                    <option value="translate">Translate</option>
+                    <option value="summarize">Summarize</option>
+                    <option value="paraphrase">Paraphrase</option>
+                </select>
+                <select id="translateLang" class="p-2 border rounded bg-gray-700 text-white hidden">
+                    <option value="hindi">Hindi</option>
+                    <option value="italian">Italian</option>
+                    <option value="french">French</option>
+                    <option value="german">German</option>
+                    <option value="spanish">Spanish</option>
+                </select>
+                <button id="processBtn" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+                    <i class="fas fa-play mr-2"></i>Process
+                </button>
+            </div>
+        </div>
+        
+
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md">
+            <h2 id="processedTextTitle" class="text-xl font-semibold mb-4 text-center"><i class="fas fa-check-circle mr-2"></i>Processed Text</h2>
+            <div class="relative pt-2">
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-700">
+                    <div id="processingProgress" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <textarea id="processedText" class="w-full h-32 p-2 border rounded bg-gray-700 text-white" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadedImage = document.getElementById('uploadedImage');
+        const extractTextBtn = document.getElementById('extractTextBtn');
+        const extractedText = document.getElementById('extractedText');
+        const processOption = document.getElementById('processOption');
+        const translateLang = document.getElementById('translateLang');
+        const processBtn = document.getElementById('processBtn');
+        const processedText = document.getElementById('processedText');
+        const processedTextTitle = document.getElementById('processedTextTitle');
+        const extractionProgress = document.getElementById('extractionProgress');
+        const processingProgress = document.getElementById('processingProgress');
+        const previewContainer = document.getElementById('previewContainer');
+
+        let capturedImage = null;
+        let stream = null;
+
+        // Camera capture
+        captureBtn.addEventListener('click', async () => {
+            try {
+                if (stream) {
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                }
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.classList.remove('hidden');
+                canvas.classList.add('hidden');
+                uploadedImage.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+                video.play();
+                captureBtn.innerHTML = '<i class="fas fa-camera mr-2"></i>Take Photo';
+                captureBtn.removeEventListener('click', arguments.callee);
+                captureBtn.addEventListener('click', takePhoto);
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+            }
+        });
+
+        function takePhoto() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.classList.add('hidden');
+            canvas.classList.remove('hidden');
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+            capturedImage = canvas.toDataURL('image/jpeg');
+            captureBtn.innerHTML = '<i class="fas fa-camera mr-2"></i>Capture Image';
+            captureBtn.removeEventListener('click', takePhoto);
+            captureBtn.addEventListener('click', startCamera);
+        }
+
+        function startCamera() {
+            captureBtn.click();
+        }
+
+        // File upload
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    uploadedImage.src = e.target.result;
+                    uploadedImage.classList.remove('hidden');
+                    video.classList.add('hidden');
+                    canvas.classList.add('hidden');
+                    previewContainer.classList.remove('hidden');
+                    capturedImage = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Extract text
+        extractTextBtn.addEventListener('click', () => {
+            if (!capturedImage) {
+                alert('Please capture or upload an image first');
+                return;
+            }
+            extractionProgress.style.width = '0%';
+            extractedText.value = '';
+            processImage(capturedImage);
+        });
+
+        // Process image and extract text
+        function processImage(imageData) {
+            extractionProgress.style.width = '50%';
+            fetch('/extract_text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                extractedText.value = data.text;
+                extractionProgress.style.width = '100%';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                extractionProgress.style.width = '0%';
+            });
+        }
+
+        // Show/hide translate language dropdown
+        processOption.addEventListener('change', () => {
+            translateLang.classList.toggle('hidden', processOption.value !== 'translate');
+        });
+
+        // Process text
+        processBtn.addEventListener('click', () => {
+            const option = processOption.value;
+            if (!option) {
+                alert('Please select a processing option');
+                return;
+            }
+
+            const text = extractedText.value;
+            if (!text) {
+                alert('Please extract text from an image first');
+                return;
+            }
+
+            let endpoint = `/${option}_text`;
+            let body = { text };
+
+            if (option === 'translate') {
+                body.language = translateLang.value;
+            }
+
+            processingProgress.style.width = '50%';
+            processedText.value = '';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(response => response.json())
+            .then(data => {
+                processedText.value = data.result;
+                processedTextTitle.innerHTML = `<i class="fas fa-check-circle mr-2"></i>${option.charAt(0).toUpperCase() + option.slice(1)}d Text`;
+                processingProgress.style.width = '100%';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                processingProgress.style.width = '0%';
+            });
+        });
+    </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LikhAI Handwriting Recognition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .box {
+            background-color: #2a2a2a;
+            border-radius: 24px;
+            padding: 32px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 48px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+        .button {
+            background-color: #8BC34A;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 9999px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #7CB342;
+        }
+        .preview-area {
+            position: relative;
+            aspect-ratio: 4/3;
+            max-width: 400px;
+            margin: 0 auto;
+            overflow: hidden;
+            border-radius: 16px;
+            background-color: white;
+        }
+        .preview-area video, .preview-area img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        textarea {
+            width: 100%;
+            height: 128px;
+            padding: 16px;
+            border-radius: 12px;
+            background-color: #1a1a1a;
+            color: white;
+            border: 1px solid #444;
+            resize: vertical;
+        }
+        select {
+            background-color: #1a1a1a;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 8px 16px;
+        }
+        .hidden {
+            display: none;
+        }
+        .fade-in {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.7s, transform 0.7s;
+        }
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="box">
+            <h1>LikhAI Handwriting Recognition</h1>
+            
+            <div class="button-container">
+                <button id="cameraBtn" class="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+                    CAMERA
+                </button>
+                
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                
+                <button id="uploadBtn" class="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    UPLOAD
+                </button>
+            </div>
+
+            <div id="previewArea" class="preview-area hidden">
+                <video id="video" autoplay playsinline class="hidden"></video>
+                <img id="capturedImage" class="hidden" alt="Captured image">
+            </div>
+
+            <div id="convertBtnContainer" class="button-container hidden">
+                <button id="convertBtn" class="button">CONVERT TO DIGITAL</button>
+            </div>
+            
+            <canvas id="canvas" class="hidden"></canvas>
+        </div>
+
+        <div id="extractedTextBox" class="box fade-in">
+            <h2>Extracted Text</h2>
+            <textarea id="extractedText" readonly></textarea>
+        </div>
+
+        <div id="processingOptionsBox" class="box fade-in">
+            <h2>Processing Options</h2>
+            <div class="button-container">
+                <select id="processOption">
+                    <option value="">Select an option</option>
+                    <option value="translate">Translate</option>
+                    <option value="summarize">Summarize</option>
+                    <option value="paraphrase">Paraphrase</option>
+                </select>
+                <select id="translateLang" class="hidden">
+                    <option value="hindi">Hindi</option>
+                    <option value="italian">Italian</option>
+                    <option value="french">French</option>
+                    <option value="german">German</option>
+                    <option value="spanish">Spanish</option>
+                </select>
+                <button id="processBtn" class="button">Process</button>
+            </div>
+        </div>
+
+        <div id="processedTextBox" class="box fade-in">
+            <h2>Processed Text</h2>
+            <textarea id="processedText" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const cameraBtn = document.getElementById('cameraBtn');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const capturedImage = document.getElementById('capturedImage');
+        const previewArea = document.getElementById('previewArea');
+        const convertBtnContainer = document.getElementById('convertBtnContainer');
+        const convertBtn = document.getElementById('convertBtn');
+        const processOption = document.getElementById('processOption');
+        const translateLang = document.getElementById('translateLang');
+    
+        let stream = null;
+    
+        // Start or capture image from camera
+        cameraBtn.addEventListener('click', async () => {
+            if (stream) {
+                captureImage();
+            } else {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    video.classList.remove('hidden');
+                    capturedImage.classList.add('hidden');
+                    previewArea.classList.remove('hidden');
+                    cameraBtn.textContent = 'CAPTURE';
+                } catch (err) {
+                    console.error('Error accessing camera:', err);
+                }
+            }
+        });
+    
+        // Capture the image and show the preview
+        function captureImage() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+            const imageData = canvas.toDataURL('image/jpeg');
+            capturedImage.src = imageData;
+            capturedImage.classList.remove('hidden');
+            video.classList.add('hidden');
+    
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+    
+            cameraBtn.textContent = 'CAMERA';
+            convertBtnContainer.classList.remove('hidden');
+        }
+    
+        // Open file input dialog on button click
+        uploadBtn.addEventListener('click', () => fileInput.click());
+    
+        // Handle file input and show preview
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    capturedImage.src = e.target.result;
+                    capturedImage.classList.remove('hidden');
+                    video.classList.add('hidden');
+                    previewArea.classList.remove('hidden');
+                    convertBtnContainer.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    
+        // Scroll animation for elements
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.1
+        };
+    
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+    
+        document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+    
+        // Call the backend to perform OCR
+        convertBtn.addEventListener('click', () => {
+            const imageData = capturedImage.src;
+    
+            const data = { image: imageData };
+    
+            fetch('/extract_text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.text) {
+                    // Display the extracted text and allow processing options
+                    console.log('Extracted Text:', data.text);
+                    // Store the extracted text for further processing
+                    document.getElementById('extractedText').textContent = data.text;
+                    convertBtnContainer.classList.add('hidden');
+                    document.getElementById('processOptionContainer').classList.remove('hidden');
+                } else {
+                    alert('OCR failed!');
+                }
+            })
+            .catch(error => {
+                console.error('Error during OCR:', error);
+                alert('An error occurred during OCR processing.');
+            });
+        });
+    
+        // Show or hide translation input based on selected operation
+        processOption.addEventListener('change', () => {
+            if (processOption.value === 'translate') {
+                translateLang.classList.remove('hidden');
+            } else {
+                translateLang.classList.add('hidden');
+            }
+        });
+    
+        // Handle text processing (translate, summarize, paraphrase)
+        const processBtn = document.getElementById('processBtn');
+        processBtn.addEventListener('click', () => {
+            const option = processOption.value;
+            const text = document.getElementById('extractedText').textContent.trim();
+            if (!text) {
+                alert('No text extracted for processing');
+                return;
+            }
+    
+            if (!option) {
+                alert('Please select a processing option');
+                return;
+            }
+    
+            const processData = { text: text };
+    
+            if (option === 'translate') {
+                const language = translateLang.value;
+                processData.language = language;
+                fetch('/translate_text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(processData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.result) {
+                        alert(`Translated text: ${data.result}`);
+                    } else {
+                        alert('Translation failed!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during translation:', error);
+                    alert('An error occurred during translation.');
+                });
+            } else if (option === 'summarize') {
+                fetch('/summarize_text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(processData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.result) {
+                        alert(`Summarized text: ${data.result}`);
+                    } else {
+                        alert('Summarization failed!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during summarization:', error);
+                    alert('An error occurred during summarization.');
+                });
+            } else if (option === 'paraphrase') {
+                fetch('/paraphrase_text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(processData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.result) {
+                        alert(`Paraphrased text: ${data.result}`);
+                    } else {
+                        alert('Paraphrasing failed!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during paraphrasing:', error);
+                    alert('An error occurred during paraphrasing.');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

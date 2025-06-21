@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LikhAI: Handwritten Text Processor</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'dark-bg': '#121212',
+                        'lighter-black': '#1E1E1E',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .box {
+            transition: transform 0.3s ease-in-out;
+        }
+        .box:hover {
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-b from-dark-bg to-black text-white min-h-screen flex items-center justify-center">
+    <div class="max-w-4xl w-full p-8">
+        <h1 class="text-3xl font-bold mb-8 text-center"><i class="fas fa-pencil mr-2"></i>LikhAI&nbsp<i class="fas fa-pencil mr-2"></i></h1>
+        
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8 box">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-image mr-2"></i>Input</h2>
+            <div class="flex justify-center space-x-4 mb-4">
+                <button id="captureBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    <i class="fas fa-camera mr-2"></i>Capture Image
+                </button>
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                <button id="uploadBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    <i class="fas fa-upload mr-2"></i>Upload Image
+                </button>
+            </div>
+            <div id="previewContainer" class="relative w-full h-64 bg-gray-800 rounded overflow-hidden hidden">
+                <video id="video" class="absolute top-0 left-0 w-full h-full object-contain hidden"></video>
+                <canvas id="canvas" class="absolute top-0 left-0 w-full h-full object-contain hidden"></canvas>
+                <img id="uploadedImage" class="absolute top-0 left-0 w-full h-full object-contain hidden" alt="Uploaded image">
+            </div>
+            <div class="flex justify-center mt-4">
+                <button id="extractTextBtn" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">
+                    <i class="fas fa-file-alt mr-2"></i>Extract Text
+                </button>
+            </div>
+        </div>
+        
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8 box">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-file-text mr-2"></i>Extracted Text</h2>
+            <div class="relative pt-2">
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-700">
+                    <div id="extractionProgress" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <textarea id="extractedText" class="w-full h-32 p-2 border rounded bg-gray-700 text-white" readonly></textarea>
+        </div>
+        
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md mb-8 box">
+            <h2 class="text-xl font-semibold mb-4 text-center"><i class="fas fa-cogs mr-2"></i>Processing Options</h2>
+            <div class="flex justify-center space-x-4 items-center">
+                <select id="processOption" class="p-2 border rounded bg-gray-700 text-white">
+                    <option value="">Select an option</option>
+                    <option value="translate">Translate</option>
+                    <option value="summarize">Summarize</option>
+                    <option value="paraphrase">Paraphrase</option>
+                </select>
+                <select id="translateLang" class="p-2 border rounded bg-gray-700 text-white hidden">
+                    <option value="hindi">Hindi</option>
+                    <option value="italian">Italian</option>
+                    <option value="french">French</option>
+                    <option value="german">German</option>
+                    <option value="spanish">Spanish</option>
+                </select>
+                <button id="processBtn" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center">
+                    <i class="fas fa-play mr-2"></i>Process
+                    <div id="processLoader" class="ml-2 hidden">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                </button>
+            </div>
+        </div>
+        
+        <div class="bg-lighter-black p-6 rounded-lg shadow-md box">
+            <h2 id="processedTextTitle" class="text-xl font-semibold mb-4 text-center"><i class="fas fa-check-circle mr-2"></i>Processed Text</h2>
+            <div class="relative pt-2">
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-700">
+                    <div id="processingProgress" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <textarea id="processedText" class="w-full h-32 p-2 border rounded bg-gray-700 text-white" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadedImage = document.getElementById('uploadedImage');
+        const extractTextBtn = document.getElementById('extractTextBtn');
+        const extractedText = document.getElementById('extractedText');
+        const processOption = document.getElementById('processOption');
+        const translateLang = document.getElementById('translateLang');
+        const processBtn = document.getElementById('processBtn');
+        const processedText = document.getElementById('processedText');
+        const processedTextTitle = document.getElementById('processedTextTitle');
+        const extractionProgress = document.getElementById('extractionProgress');
+        const processingProgress = document.getElementById('processingProgress');
+        const previewContainer = document.getElementById('previewContainer');
+        const processLoader = document.getElementById('processLoader');
+
+        let capturedImage = null;
+        let stream = null;
+
+        // Camera capture
+        captureBtn.addEventListener('click', async () => {
+            try {
+                if (stream) {
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                }
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.classList.remove('hidden');
+                canvas.classList.add('hidden');
+                uploadedImage.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+                video.play();
+                captureBtn.innerHTML = '<i class="fas fa-camera mr-2"></i>Take Photo';
+                captureBtn.removeEventListener('click', arguments.callee);
+                captureBtn.addEventListener('click', takePhoto);
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+            }
+        });
+
+        function takePhoto() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.classList.add('hidden');
+            canvas.classList.remove('hidden');
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+            capturedImage = canvas.toDataURL('image/jpeg');
+            captureBtn.innerHTML = '<i class="fas fa-camera mr-2"></i>Capture Image';
+            captureBtn.removeEventListener('click', takePhoto);
+            captureBtn.addEventListener('click', startCamera);
+        }
+
+        function startCamera() {
+            captureBtn.click();
+        }
+
+        // File upload
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    uploadedImage.src = e.target.result;
+                    uploadedImage.classList.remove('hidden');
+                    video.classList.add('hidden');
+                    canvas.classList.add('hidden');
+                    previewContainer.classList.remove('hidden');
+                    capturedImage = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Extract text
+        extractTextBtn.addEventListener('click', () => {
+            if (!capturedImage) {
+                alert('Please capture or upload an image first');
+                return;
+            }
+            extractionProgress.style.width = '0%';
+            extractedText.value = '';
+            processImage(capturedImage);
+        });
+
+        // Process image and extract text
+        function processImage(imageData) {
+            extractionProgress.style.width = '50%';
+            fetch('/extract_text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                extractedText.value = data.text;
+                extractionProgress.style.width = '100%';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                extractionProgress.style.width = '0%';
+            });
+        }
+
+        // Show/hide translate language dropdown
+        processOption.addEventListener('change', () => {
+            translateLang.classList.toggle('hidden', processOption.value !== 'translate');
+        });
+
+        // Process text
+        processBtn.addEventListener('click', () => {
+            const option = processOption.value;
+            if (!option) {
+                alert('Please select a processing option');
+                return;
+            }
+
+            const text = extractedText.value;
+            if (!text) {
+                alert('Please extract text from an image first');
+                return;
+            }
+
+            let endpoint = `/${option}_text`;
+            let body = { text };
+
+            if (option === 'translate') {
+                body.language = translateLang.value;
+            }
+
+            processingProgress.style.width = '50%';
+            processedText.value = '';
+            processLoader.classList.remove('hidden');
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(response => response.json())
+            .then(data => {
+                processedText.value = data.result;
+                processedTextTitle.innerHTML = `<i class="fas fa-check-circle mr-2"></i>${option.charAt(0).toUpperCase() + option.slice(1)}d Text`;
+                processingProgress.style.width = '100%';
+                processLoader.classList.add('hidden');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                processingProgress.style.width = '0%';
+                processLoader.classList.add('hidden');
+            });
+        });
+    </script>
+</body>
+</html>
